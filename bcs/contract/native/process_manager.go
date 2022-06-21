@@ -12,6 +12,9 @@ import (
 	"github.com/xuperchain/xupercore/protos"
 )
 
+/**
+提供了合约进程的管理，实现拉取代码、实例化合约进程
+*/
 type processManager struct {
 	cfg       *contract.NativeConfig
 	basedir   string
@@ -78,21 +81,22 @@ func (p *processManager) lookupProcess(name string, desc *protos.WasmCodeDesc) (
 }
 
 func (p *processManager) GetProcess(name string, cp bridge.ContractCodeProvider) (*contractProcess, error) {
+	// 1.获取合约代码描述
 	desc, err := cp.GetContractCodeDesc(name)
 	if err != nil {
 		return nil, err
 	}
-
+	// 2.判断合约进程是否已存在
 	process, ok := p.lookupProcess(name, desc)
 	if ok {
 		return process, nil
 	}
-
+	// 3.获取合约代码
 	code, err := cp.GetContractCode(name)
 	if err != nil {
 		return nil, err
 	}
-
+	// 4.创建新的合约进程
 	process, err = p.makeProcess(name, desc, code)
 	if err != nil {
 		return nil, err

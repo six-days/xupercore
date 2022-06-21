@@ -1,15 +1,17 @@
 package contract
 
 import (
+	"math/big"
+
 	"github.com/xuperchain/xupercore/kernel/ledger"
 	"github.com/xuperchain/xupercore/protos"
-	"math/big"
 )
 
 type SandboxConfig struct {
 	XMReader   ledger.XMReader
 	UTXOReader UtxoReader
 }
+
 type UtxoReader interface {
 	SelectUtxo(string, *big.Int, bool, bool) ([]*protos.TxInput, [][]byte, *big.Int, error)
 }
@@ -28,13 +30,13 @@ type Iterator interface {
 // Get和Select方法得到的不是VersionedData，而是[]byte
 type XMState interface {
 	Get(bucket string, key []byte) ([]byte, error)
-	//扫描一个bucket中所有的kv, 调用者可以设置key区间[startKey, endKey)
+	// Select 扫描一个bucket中所有的kv, 调用者可以设置key区间[startKey, endKey)
 	Select(bucket string, startKey []byte, endKey []byte) (Iterator, error)
 	Put(bucket string, key, value []byte) error
 	Del(bucket string, key []byte) error
 }
 
-// XMState 对XuperBridge暴露对账本的UTXO操作能力
+// UTXOState 对XuperBridge暴露对账本的UTXO操作能力
 type UTXOState interface {
 	Transfer(from string, to string, amount *big.Int) error
 }
@@ -49,10 +51,10 @@ type ContractEventState interface {
 
 // State 抽象了链的状态机接口，合约通过State里面的方法来修改状态。
 type State interface {
-	XMState
-	UTXOState
-	CrossQueryState
-	ContractEventState
+	XMState            // 合约KV数据的读写集
+	UTXOState          // 合约UTXO读写集
+	CrossQueryState    // 跨链调用读写集
+	ContractEventState // 合约事件读写集
 }
 
 // StateSandbox 在沙盒环境里面执行状态修改操作，最终生成读写集

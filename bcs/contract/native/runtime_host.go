@@ -10,6 +10,10 @@ import (
 	log "github.com/xuperchain/log15"
 )
 
+/**
+在本机中直接启动合约进程
+*/
+
 // HostProcess is the process running as a native process
 type HostProcess struct {
 	basedir  string

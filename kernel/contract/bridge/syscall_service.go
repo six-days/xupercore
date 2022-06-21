@@ -2,6 +2,10 @@
 
 package bridge
 
+/**
+合约对Xchain调用的入口
+*/
+
 import (
 	"context"
 	"encoding/hex"
@@ -29,7 +33,7 @@ const (
 	MaxContractCallDepth = 10
 )
 
-// SyscallService is the handler of contract syscalls
+// SyscallService 合约统一通过SyscallService调用Xchain
 type SyscallService struct {
 	ctxmgr *ContextManager
 	bridge *XBridge

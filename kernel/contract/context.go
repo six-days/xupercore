@@ -9,10 +9,13 @@ const (
 	StatusError = 500
 )
 
-// Context define context interface
+// Context 合约上下文的接口定义
 type Context interface {
+	// Invoke 执行合约，合约执行结果会存储到Context中
 	Invoke(method string, args map[string][]byte) (*Response, error)
+	// ResourceUsed 合约执行过程中资源使用限制
 	ResourceUsed() Limits
+	// Release 销毁context，释放context持有的资源
 	Release() error
 }
 

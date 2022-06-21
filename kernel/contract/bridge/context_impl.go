@@ -30,6 +30,7 @@ type vmContextImpl struct {
 	release  func()
 }
 
+// Invoke 执行合约，合约的执行结果放到Context中
 func (v *vmContextImpl) Invoke(method string, args map[string][]byte) (*contract.Response, error) {
 	if !v.ctx.CanInitialize && method == initMethod {
 		return nil, errors.New("invalid contract method " + method)
@@ -64,6 +65,7 @@ func (v *vmContextImpl) ResourceUsed() contract.Limits {
 	return v.ctx.ResourceUsed()
 }
 
+// Release 合约执行完成，释放Context
 func (v *vmContextImpl) Release() error {
 	// release the context of instance
 	v.instance.Release()
