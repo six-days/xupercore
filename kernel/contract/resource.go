@@ -14,7 +14,7 @@ type Limits struct {
 	XFee   int64
 }
 
-// // TotalGas converts resource to gas
+// TotalGas converts resource to gas
 func (l *Limits) TotalGas(gasPrice *protos.GasPrice) int64 {
 	cpuGas := roundup(l.Cpu, gasPrice.GetCpuRate())
 	memGas := roundup(l.Memory, gasPrice.GetMemRate())
@@ -57,7 +57,7 @@ var MaxLimits = Limits{
 	XFee:   maxResourceLimit,
 }
 
-// // FromPbLimits converts []*pb.ResourceLimit to Limits
+// FromPbLimits converts []*pb.ResourceLimit to Limits
 func FromPbLimits(rlimits []*protos.ResourceLimit) Limits {
 	limits := Limits{}
 	for _, l := range rlimits {
@@ -75,7 +75,7 @@ func FromPbLimits(rlimits []*protos.ResourceLimit) Limits {
 	return limits
 }
 
-// // FromPbLimits converts Limits to []*pb.ResourceLimit
+// ToPbLimits converts Limits to []*pb.ResourceLimit
 func ToPbLimits(limits Limits) []*protos.ResourceLimit {
 	return []*protos.ResourceLimit{
 		{Type: protos.ResourceType_CPU, Limit: limits.Cpu},

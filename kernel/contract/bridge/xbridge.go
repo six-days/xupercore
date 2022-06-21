@@ -1,5 +1,12 @@
 package bridge
 
+/**
+XuperBridge桥接层实现合约和虚拟机的解耦，桥接层主要负责：
+1、虚拟机的管理，包括注册与发现
+2、合约上下文的管理
+3、合约执行沙盒
+4、合约代码管理
+*/
 import (
 	"fmt"
 	"path/filepath"
@@ -7,7 +14,6 @@ import (
 	"github.com/xuperchain/xupercore/kernel/contract"
 	"github.com/xuperchain/xupercore/kernel/ledger"
 	"github.com/xuperchain/xupercore/lib/logs"
-
 	"github.com/xuperchain/xupercore/protos"
 )
 
@@ -36,8 +42,9 @@ type XBridgeConfig struct {
 	Core      contract.ChainCore
 }
 
-// New instances a new XBridge
+// New 构建XBridge对象
 func New(cfg *XBridgeConfig) (*XBridge, error) {
+	// 创建上下文管理对象
 	ctxmgr := NewContextManager()
 	xbridge := &XBridge{
 		ctxmgr:      ctxmgr,
@@ -63,6 +70,7 @@ func New(cfg *XBridgeConfig) (*XBridge, error) {
 	return xbridge, nil
 }
 
+// initVM 初始化虚拟机
 func (v *XBridge) initVM() error {
 	types := []ContractType{TypeWasm, TypeNative, TypeEvm, TypeKernel}
 	for _, tp := range types {
@@ -93,6 +101,7 @@ func (v *XBridge) getCreator(tp ContractType) InstanceCreator {
 	return v.creators[tp]
 }
 
+// NewContext 实例化合约上下文
 func (v *XBridge) NewContext(ctxCfg *contract.ContextConfig) (contract.Context, error) {
 	var desc *protos.WasmCodeDesc
 	var err error
@@ -112,6 +121,7 @@ func (v *XBridge) NewContext(ctxCfg *contract.ContextConfig) (contract.Context, 
 	if err != nil {
 		return nil, err
 	}
+	// 获取虚拟机实例
 	vm := v.getCreator(tp)
 	if vm == nil {
 		return nil, fmt.Errorf("vm for contract type %s not supported", tp)

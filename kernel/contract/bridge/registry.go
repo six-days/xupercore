@@ -1,5 +1,9 @@
 package bridge
 
+/**
+虚拟机的注册和发现
+*/
+
 import (
 	"fmt"
 	"sync"
@@ -52,10 +56,11 @@ func (r *registry) Open(tp ContractType, name string, config *InstanceCreatorCon
 	if !ok {
 		return nil, fmt.Errorf("driver %s not found", name)
 	}
+	// 初始化虚拟机Creator
 	return driverFunc(config)
 }
 
-// Register makes a contract driver available by the provided type and name
+// Register 注册虚拟机驱动，在系统启动时开始注册
 func Register(tp ContractType, name string, driver NewInstanceCreatorFunc) {
 	defaultRegistry.Register(tp, name, driver)
 }

@@ -12,6 +12,9 @@ import (
 	"github.com/xuperchain/xupercore/kernel/contract"
 )
 
+/**
+在docker环境下启动合约进程
+*/
 var (
 	dockerOnce   sync.Once
 	dockerClient *docker.Client

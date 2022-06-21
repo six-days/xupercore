@@ -19,6 +19,11 @@ import (
 	"google.golang.org/grpc"
 )
 
+/**
+提供了合约进程的具体实现
+负责构建合约进程环境、启动、停止合约进程
+同时也作为合约进程的Supervise存在，负责拉起挂掉的合约进程
+*/
 type contractProcess struct {
 	cfg *contract.NativeConfig
 
@@ -87,7 +92,7 @@ func (c *contractProcess) makeNativeProcess() (Process, error) {
 
 // wait the subprocess to be ready
 func (c *contractProcess) waitReply() error {
-	const waitTimeout = 2 * time.Second
+	const waitTimeout = 20 * time.Second
 	ctx, cancel := context.WithTimeout(context.TODO(), waitTimeout)
 	defer cancel()
 	for {
@@ -168,25 +173,29 @@ func (c *contractProcess) restartProcess() error {
 }
 
 func (c *contractProcess) start(startMonitor bool) error {
+	// 1.初始化合约grpc客户端
 	err := c.resetRpcClient()
 	if err != nil {
 		return err
 	}
+	// 2.创建合约进程，host或docker
 	c.process, err = c.makeNativeProcess()
 	if err != nil {
 		return err
 	}
-
+	// 3.启动合约进程
 	err = c.process.Start()
 	if err != nil {
 		return err
 	}
+	// 4.等待合约进程响应
 	err = c.waitReply()
 	if err != nil {
 		// 避免启动失败后产生僵尸进程
 		c.process.Stop(time.Second)
 		return err
 	}
+	// 5.开启进程监控
 	if startMonitor {
 		go c.monitor()
 	}

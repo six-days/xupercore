@@ -4,6 +4,9 @@ import (
 	"time"
 )
 
+/**
+启动与停止合约进程的接口约束
+*/
 const (
 	pingTimeoutSecond = 2
 )

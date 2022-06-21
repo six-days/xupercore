@@ -2,12 +2,20 @@ package contract
 
 import (
 	"fmt"
-	"github.com/xuperchain/xupercore/kernel/contract/bridge/pb"
 	"sync"
+
+	"github.com/xuperchain/xupercore/kernel/contract/bridge/pb"
 
 	"github.com/xuperchain/xupercore/kernel/common/xconfig"
 	"github.com/xuperchain/xupercore/kernel/ledger"
 )
+
+/**
+合约管理组件的定义，其功能包括：
+1. 实例化上下文 NewContext
+2. 实例化执行沙盒 NewStateSandbox
+3. 获取内核注册 GetKernRegistry
+*/
 
 var (
 	managerMutex sync.Mutex
@@ -34,7 +42,7 @@ type ManagerConfig struct {
 
 // ChainCore is the interface of chain service
 type ChainCore interface {
-	// GetAccountAddress get addresses associated with account name
+	// GetAccountAddresses get addresses associated with account name
 	GetAccountAddresses(accountName string) ([]string, error)
 	// VerifyContractPermission verify permission of calling contract
 	VerifyContractPermission(initiator string, authRequire []string, contractName, methodName string) (bool, error)

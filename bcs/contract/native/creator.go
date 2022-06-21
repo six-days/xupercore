@@ -13,12 +13,18 @@ import (
 	"google.golang.org/grpc"
 )
 
+/**
+core/contract/bridge/vm.go中定义的
+Native虚拟机的接口的实现
+*/
+
 type nativeCreator struct {
 	config   *bridge.InstanceCreatorConfig
 	listener net.Listener
 	pm       *processManager
 }
 
+// newNativeCreator 发现Native虚拟机，由XBridge统一管理，initVM时运行
 func newNativeCreator(cfg *bridge.InstanceCreatorConfig) (bridge.InstanceCreator, error) {
 	creator := &nativeCreator{
 		config: cfg,
@@ -42,17 +48,21 @@ func newNativeCreator(cfg *bridge.InstanceCreatorConfig) (bridge.InstanceCreator
 	return creator, nil
 }
 
+// startRpcServer 将SyscallService注册成为一个Grpc服务
 func (n *nativeCreator) startRpcServer(service *bridge.SyscallService) (string, error) {
+	// 1.监听端口号
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return "", err
 	}
 	n.listener = listener
+	// 2.实例化给RPC实例
 	rpcServer := grpc.NewServer()
+	// 3.注册服务
 	pbrpc.RegisterSyscallServer(rpcServer, service)
 
 	port := listener.Addr().(*net.TCPAddr).Port
-
+	// 4.启动rpc服务
 	go rpcServer.Serve(listener)
 	chainAddr := chainAddrHost
 	if n.config.VMConfig.(*contract.NativeConfig).Docker.Enable {
@@ -63,6 +73,7 @@ func (n *nativeCreator) startRpcServer(service *bridge.SyscallService) (string, 
 	return addr, nil
 }
 
+// CreateInstance 创建虚拟机实例
 func (n *nativeCreator) CreateInstance(ctx *bridge.Context, cp bridge.ContractCodeProvider) (bridge.Instance, error) {
 	process, err := n.pm.GetProcess(ctx.ContractName, cp)
 	if err != nil {
@@ -71,6 +82,7 @@ func (n *nativeCreator) CreateInstance(ctx *bridge.Context, cp bridge.ContractCo
 	return newNativeVmInstance(ctx, process), nil
 }
 
+// RemoveCache 清除虚拟机缓存
 func (n *nativeCreator) RemoveCache(name string) {
 
 }
@@ -87,6 +99,7 @@ func newNativeVmInstance(ctx *bridge.Context, process *contractProcess) *nativeV
 	}
 }
 
+// Exec 执行合约调用
 func (i *nativeVmInstance) Exec() error {
 	request := &pb.NativeCallRequest{
 		Ctxid: i.ctx.ID,
@@ -108,6 +121,7 @@ func (i *nativeVmInstance) Release() {
 func (i *nativeVmInstance) Abort(msg string) {
 }
 
+// init 注册Native虚拟机
 func init() {
 	bridge.Register(bridge.TypeNative, "native", newNativeCreator)
 }

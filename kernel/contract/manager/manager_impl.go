@@ -3,8 +3,9 @@ package manager
 import (
 	"errors"
 	"fmt"
-	"github.com/xuperchain/xupercore/lib/logs"
 	"path/filepath"
+
+	"github.com/xuperchain/xupercore/lib/logs"
 
 	"github.com/xuperchain/xupercore/kernel/contract"
 	"github.com/xuperchain/xupercore/kernel/contract/bridge"
@@ -12,6 +13,9 @@ import (
 	"github.com/xuperchain/xupercore/kernel/permission/acl/utils"
 )
 
+/**
+合约管理组件的具体实现
+*/
 type managerImpl struct {
 	core      contract.ChainCore
 	xbridge   *bridge.XBridge
@@ -52,6 +56,7 @@ func newManagerImpl(cfg *contract.ManagerConfig) (contract.Manager, error) {
 	if cfg.Config != nil {
 		logDriver = cfg.Config.LogDriver
 	}
+	// 实例化XBridge
 	xbridge, err := bridge.New(&bridge.XBridgeConfig{
 		Basedir: cfg.Basedir,
 		VMConfigs: map[bridge.ContractType]bridge.VMConfig{
@@ -81,10 +86,12 @@ func newManagerImpl(cfg *contract.ManagerConfig) (contract.Manager, error) {
 	return m, nil
 }
 
+// NewContext 实例化上下文
 func (m *managerImpl) NewContext(cfg *contract.ContextConfig) (contract.Context, error) {
 	return m.xbridge.NewContext(cfg)
 }
 
+// NewStateSandbox 实例化执行沙盒
 func (m *managerImpl) NewStateSandbox(cfg *contract.SandboxConfig) (contract.StateSandbox, error) {
 	return sandbox.NewXModelCache(cfg), nil
 }
@@ -147,6 +154,7 @@ func (m *managerImpl) upgradeContract(ctx contract.KContext) (*contract.Response
 	return resp, nil
 }
 
+// init 注册ContractManager
 func init() {
 	contract.Register("default", newManagerImpl)
 }

@@ -57,7 +57,7 @@ func TestNative(t *testing.T) {
 		LogDriver: mock.NewMockLogger(),
 	}
 
-	runtimes := []string{RUNTIME_HOST, RUNTIME_DOCKER}
+	runtimes := []string{RUNTIME_HOST}
 
 	for _, runtime := range runtimes {
 		if runtime == RUNTIME_DOCKER {
@@ -77,7 +77,7 @@ func TestNative(t *testing.T) {
 		} else {
 			contractConfig.Native.Docker.Enable = false
 		}
-		t.Run("TestNativeDeploy_"+runtime, func(t *testing.T) {
+		/*t.Run("TestNativeDeploy_"+runtime, func(t *testing.T) {
 			th := mock.NewTestHelper(contractConfig)
 			defer th.Close()
 
@@ -93,7 +93,7 @@ func TestNative(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Logf("%#v", resp)
-		})
+		})*/
 		t.Run("TestNativeInvoke_"+runtime, func(t *testing.T) {
 			th := mock.NewTestHelper(contractConfig)
 			defer th.Close()

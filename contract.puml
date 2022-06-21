@@ -1,0 +1,595 @@
+@startuml
+
+namespace bridge {
+    class Context << (S,Aquamarine) >> {
+        + ID int64
+        + Module string
+        + ContractName string
+        + ResourceLimits contract.Limits
+        + State contract.StateSandbox
+        + Args <font color=blue>map</font>[string][]byte
+        + Method string
+        + Initiator string
+        + Caller string
+        + AuthRequire []string
+        + CanInitialize bool
+        + Core contract.ChainCore
+        + TransferAmount string
+        + Instance Instance
+        + Logger logs.Logger
+        + SubResourceUsed contract.Limits
+        + ContractSet <font color=blue>map</font>[string]bool
+        + Events []*protos.ContractEvent
+        + Output *pb.Response
+        + ReadFromCache bool
+
+        + DiskUsed() int64
+        + ExceedDiskLimit() bool
+        + ResourceUsed() contract.Limits
+        + GetInitiator() string
+        + GetAuthRequire() []string
+
+    }
+    class ContextManager << (S,Aquamarine) >> {
+        - ctxlock sync.Mutex
+        - ctxid int64
+        - ctxs <font color=blue>map</font>[int64]*Context
+
+        + Context(id int64) (*Context, bool)
+        + MakeContext() *Context
+        + DestroyContext(ctx *Context) 
+
+    }
+    interface ContractCodeProvider  {
+        + GetContractCodeDesc(name string) (*protos.WasmCodeDesc, error)
+        + GetContractCode(name string) ([]byte, error)
+        + GetContractAbi(name string) ([]byte, error)
+        + GetContractCodeFromCache(name string) ([]byte, error)
+        + GetContractAbiFromCache(name string) ([]byte, error)
+
+    }
+    class ContractError << (S,Aquamarine) >> {
+        + Status int
+        + Message string
+
+        + Error() string
+
+    }
+    interface Instance  {
+        + Exec() error
+        + ResourceUsed() contract.Limits
+        + Release() 
+        + Abort(msg string) 
+
+    }
+    interface InstanceCreator  {
+        + CreateInstance(ctx *Context, cp ContractCodeProvider) (Instance, error)
+        + RemoveCache(name string) 
+
+    }
+    class InstanceCreatorConfig << (S,Aquamarine) >> {
+        + Basedir string
+        + SyscallService *SyscallService
+        + VMConfig VMConfig
+
+    }
+    class SyscallService << (S,Aquamarine) >> {
+        - ctxmgr *ContextManager
+        - bridge *XBridge
+        - core contract.ChainCore
+
+        + Ping(ctx context.Context, in *pb.PingRequest) (*pb.PingResponse, error)
+        + QueryBlock(ctx context.Context, in *pb.QueryBlockRequest) (*pb.QueryBlockResponse, error)
+        + QueryTx(ctx context.Context, in *pb.QueryTxRequest) (*pb.QueryTxResponse, error)
+        + Transfer(ctx context.Context, in *pb.TransferRequest) (*pb.TransferResponse, error)
+        + ContractCall(ctx context.Context, in *pb.ContractCallRequest) (*pb.ContractCallResponse, error)
+        + CrossContractQuery(ctx context.Context, in *pb.CrossContractQueryRequest) (*pb.CrossContractQueryResponse, error)
+        + PutObject(ctx context.Context, in *pb.PutRequest) (*pb.PutResponse, error)
+        + GetObject(ctx context.Context, in *pb.GetRequest) (*pb.GetResponse, error)
+        + DeleteObject(ctx context.Context, in *pb.DeleteRequest) (*pb.DeleteResponse, error)
+        + NewIterator(ctx context.Context, in *pb.IteratorRequest) (*pb.IteratorResponse, error)
+        + GetCallArgs(ctx context.Context, in *pb.GetCallArgsRequest) (*pb.CallArgs, error)
+        + SetOutput(ctx context.Context, in *pb.SetOutputRequest) (*pb.SetOutputResponse, error)
+        + GetAccountAddresses(ctx context.Context, in *pb.GetAccountAddressesRequest) (*pb.GetAccountAddressesResponse, error)
+        + PostLog(ctx context.Context, in *pb.PostLogRequest) (*pb.PostLogResponse, error)
+        + EmitEvent(ctx context.Context, in *pb.EmitEventRequest) (*pb.EmitEventResponse, error)
+
+    }
+    interface VMConfig  {
+        + DriverName() string
+        + IsEnable() bool
+
+    }
+    class XBridge << (S,Aquamarine) >> {
+        - ctxmgr *ContextManager
+        - syscallService *SyscallService
+        - basedir string
+        - vmconfigs <font color=blue>map</font>[ContractType]VMConfig
+        - creators <font color=blue>map</font>[ContractType]InstanceCreator
+        - xmodel ledger.XMReader
+        - config contract.ContractConfig
+        - core contract.ChainCore
+        - debugLogger logs.Logger
+
+        - initVM() error
+        - getCreator(tp ContractType) InstanceCreator
+
+        + NewContext(ctxCfg *contract.ContextConfig) (contract.Context, error)
+
+    }
+    class XBridgeConfig << (S,Aquamarine) >> {
+        + Basedir string
+        + VMConfigs <font color=blue>map</font>[ContractType]VMConfig
+        + XModel ledger.XMReader
+        + Config contract.ContractConfig
+        + LogDriver logs.Logger
+        + Core contract.ChainCore
+
+    }
+    class bridge.ContractType << (T, #FF7700) >>  {
+    }
+    class bridge.NewInstanceCreatorFunc << (T, #FF7700) >>  {
+    }
+    class codeProvider << (S,Aquamarine) >> {
+        - xstore stateReader
+
+        + GetContractCode(name string) ([]byte, error)
+        + GetContractAbi(name string) ([]byte, error)
+        + GetContractCodeDesc(name string) (*protos.WasmCodeDesc, error)
+        + GetContractCodeFromCache(name string) ([]byte, error)
+        + GetContractAbiFromCache(name string) ([]byte, error)
+
+    }
+    class contractManager << (S,Aquamarine) >> {
+        - xbridge *XBridge
+        - codeProvider ContractCodeProvider
+
+        - initContract(tp ContractType, contextConfig *contract.ContextConfig, args <font color=blue>map</font>[string][]byte) (*contract.Response, contract.Limits, error)
+
+        + DeployContract(kctx contract.KContext) (*contract.Response, contract.Limits, error)
+        + UpgradeContract(kctx contract.KContext) (*contract.Response, contract.Limits, error)
+
+    }
+    class descProvider << (S,Aquamarine) >> {
+        - desc *protos.WasmCodeDesc
+
+        + GetContractCodeDesc(name string) (*protos.WasmCodeDesc, error)
+
+    }
+    class registry << (S,Aquamarine) >> {
+        - mutex sync.Mutex
+        - drivers <font color=blue>map</font>[ContractType]<font color=blue>map</font>[string]NewInstanceCreatorFunc
+
+        + Register(tp ContractType, name string, driver NewInstanceCreatorFunc) 
+        + Open(tp ContractType, name string, config *InstanceCreatorConfig) (InstanceCreator, error)
+
+    }
+    interface stateGetReader  {
+        + Get(bucket string, key []byte) ([]byte, error)
+
+    }
+    interface stateReader  {
+        + Get(bucket string, key []byte) ([]byte, error)
+        + GetUncommited(bucket string, key []byte) (*ledger.VersionedData, error)
+
+    }
+    class stateReaderWrapper << (S,Aquamarine) >> {
+        + GetUncommited(bucket string, key []byte) (*ledger.VersionedData, error)
+
+    }
+    class vmContextImpl << (S,Aquamarine) >> {
+        - ctx *Context
+        - instance Instance
+        - release <font color=blue>func</font>() 
+
+        + Invoke(method string, args <font color=blue>map</font>[string][]byte) (*contract.Response, error)
+        + ResourceUsed() contract.Limits
+        + Release() error
+
+    }
+    class xmStateReader << (S,Aquamarine) >> {
+        - r ledger.XMReader
+
+        + Get(bucket string, key []byte) ([]byte, error)
+        + GetUncommited(bucket string, key []byte) (*ledger.VersionedData, error)
+
+    }
+}
+"bridge.contractManager" *-- "bridge.XBridge"
+"bridge.ContractCodeProvider" *-- "bridge.descProvider"
+"bridge.stateGetReader" *-- "bridge.stateReaderWrapper"
+
+"pbrpc.SyscallServer" <|-- "bridge.SyscallService"
+"bridge.ContractCodeProvider" <|-- "bridge.codeProvider"
+"contract.Context" <|-- "bridge.vmContextImpl"
+"bridge.stateGetReader" <|-- "bridge.xmStateReader"
+"bridge.stateReader" <|-- "bridge.xmStateReader"
+
+namespace contract {
+    interface ChainCore  {
+        + GetAccountAddresses(accountName string) ([]string, error)
+        + VerifyContractPermission(initiator string, authRequire []string, contractName string, methodName string) (bool, error)
+        + VerifyContractOwnerPermission(contractName string, authRequire []string) error
+        + QueryTransaction(txid []byte) (*pb.Transaction, error)
+        + QueryBlock(blockid []byte) (ledger.BlockHandle, error)
+
+    }
+    interface Context  {
+        + Invoke(method string, args <font color=blue>map</font>[string][]byte) (*Response, error)
+        + ResourceUsed() Limits
+        + Release() error
+
+    }
+    class ContextConfig << (S,Aquamarine) >> {
+        + State StateSandbox
+        + Initiator string
+        + AuthRequire []string
+        + Caller string
+        + Module string
+        + ContractName string
+        + ResourceLimits Limits
+        + CanInitialize bool
+        + TransferAmount string
+        + ContractSet <font color=blue>map</font>[string]bool
+        + ContractCodeFromCache bool
+        + TxInBlock bool
+
+    }
+    class ContractConfig << (S,Aquamarine) >> {
+        + EnableDebugLog bool
+        + EnableUpgrade bool
+        + LogDriver logs.Logger
+        + Native NativeConfig
+        + Wasm WasmConfig
+        + Xkernel XkernelConfig
+        + EVM EVMConfig
+
+    }
+    interface ContractEventState  {
+        + AddEvent(events ...*protos.ContractEvent) 
+
+    }
+
+    class EVMConfig << (S,Aquamarine) >> {
+        + Enable bool
+        + Driver string
+
+        + DriverName() string
+        + IsEnable() bool
+
+    }
+
+    interface KContext  {
+        + Args() <font color=blue>map</font>[string][]byte
+        + Initiator() string
+        + Caller() string
+        + AuthRequire() []string
+        + AddResourceUsed(delta Limits) 
+        + ResourceLimit() Limits
+        + Call(module string, contract string, method string, args <font color=blue>map</font>[string][]byte) (*Response, error)
+        + EmitAsyncTask(event string, args <font color=blue>interface</font>{}) error
+
+    }
+    interface KernRegistry  {
+        + RegisterKernMethod(contract string, method string, handler KernMethod) 
+        + UnregisterKernMethod(ctract string, method string) 
+        + RegisterShortcut(oldmethod string, contract string, method string) 
+        + GetKernMethod(contract string, method string) (KernMethod, error)
+
+    }
+    class Limits << (S,Aquamarine) >> {
+        + Cpu int64
+        + Memory int64
+        + Disk int64
+        + XFee int64
+
+        + TotalGas(gasPrice *protos.GasPrice) int64
+        + Add(l1 Limits) *Limits
+        + Sub(l1 Limits) *Limits
+        + Exceed(l1 Limits) bool
+
+    }
+
+    interface Manager  {
+        + NewContext(cfg *ContextConfig) (Context, error)
+        + NewStateSandbox(cfg *SandboxConfig) (StateSandbox, error)
+        + GetKernRegistry() KernRegistry
+
+    }
+    class ManagerConfig << (S,Aquamarine) >> {
+        + Basedir string
+        + BCName string
+        + EnvConf *xconfig.EnvConf
+        + Core ChainCore
+        + XMReader ledger.XMReader
+        + Config *ContractConfig
+
+    }
+    class NativeConfig << (S,Aquamarine) >> {
+        + Driver string
+        + StopTimeout int
+        + Docker NativeDockerConfig
+        + Enable bool
+
+        + DriverName() string
+        + IsEnable() bool
+
+    }
+    class NativeDockerConfig << (S,Aquamarine) >> {
+        + Enable bool
+        + ImageName string
+        + Cpus float32
+        + Memory string
+
+    }
+
+    class Response << (S,Aquamarine) >> {
+        + Status int
+        + Message string
+        + Body []byte
+
+    }
+    class SandboxConfig << (S,Aquamarine) >> {
+        + XMReader ledger.XMReader
+        + UTXOReader UtxoReader
+
+    }
+    interface State  {
+    }
+    interface StateSandbox  {
+        + Flush() error
+        + RWSet() *RWSet
+        + UTXORWSet() *UTXORWSet
+
+    }
+    class UTXORWSet << (S,Aquamarine) >> {
+        + Rset []*protos.TxInput
+        + WSet []*protos.TxOutput
+
+    }
+    interface UTXOState  {
+        + Transfer(from string, to string, amount *big.Int) error
+
+    }
+    interface UtxoReader  {
+        + SelectUtxo( string,  *big.Int,  bool,  bool) ([]*protos.TxInput, [][]byte, *big.Int, error)
+
+    }
+    class WasmConfig << (S,Aquamarine) >> {
+        + Enable bool
+        + Driver string
+        + XVM XVMConfig
+
+        + DriverName() string
+        + IsEnable() bool
+
+    }
+    interface XMState  {
+        + Get(bucket string, key []byte) ([]byte, error)
+        + Select(bucket string, startKey []byte, endKey []byte) (Iterator, error)
+        + Put(bucket string, key []byte, value []byte) error
+        + Del(bucket string, key []byte) error
+
+    }
+    class XVMConfig << (S,Aquamarine) >> {
+        + OptLevel int
+
+    }
+    class XkernelConfig << (S,Aquamarine) >> {
+        + Enable bool
+        + Driver string
+        + Registry KernRegistry
+
+        + DriverName() string
+        + IsEnable() bool
+
+    }
+    class contract.KernMethod << (T, #FF7700) >>  {
+    }
+    class contract.NewManagerFunc << (T, #FF7700) >>  {
+    }
+}
+"contract.StateSandbox" *-- "contract.KContext"
+"contract.ContractEventState" *-- "contract.State"
+"contract.CrossQueryState" *-- "contract.State"
+"contract.UTXOState" *-- "contract.State"
+"contract.XMState" *-- "contract.State"
+"contract.State" *-- "contract.StateSandbox"
+
+"bridge.VMConfig" <|-- "contract.EVMConfig"
+"bridge.VMConfig" <|-- "contract.NativeConfig"
+"bridge.VMConfig" <|-- "contract.WasmConfig"
+"bridge.VMConfig" <|-- "contract.XkernelConfig"
+
+namespace kernel {
+    class kcontextImpl << (S,Aquamarine) >> {
+        - ctx *bridge.Context
+        - syscall *bridge.SyscallService
+        - used contract.Limits
+
+        + Args() <font color=blue>map</font>[string][]byte
+        + Initiator() string
+        + Caller() string
+        + AuthRequire() []string
+        + AddResourceUsed(delta contract.Limits) 
+        + ResourceLimit() contract.Limits
+        + Call(module string, contractName string, method string, args <font color=blue>map</font>[string][]byte) (*contract.Response, error)
+        + EmitAsyncTask(event string, args <font color=blue>interface</font>{}) error
+
+    }
+    class kernInstance << (S,Aquamarine) >> {
+        - ctx *bridge.Context
+        - kctx *kcontextImpl
+        - registry contract.KernRegistry
+
+        + Exec() error
+        + ResourceUsed() contract.Limits
+        + Release() 
+        + Abort(msg string) 
+
+    }
+    class kernvm << (S,Aquamarine) >> {
+        - registry contract.KernRegistry
+        - config *bridge.InstanceCreatorConfig
+
+        + CreateInstance(ctx *bridge.Context, cp bridge.ContractCodeProvider) (bridge.Instance, error)
+        + RemoveCache(name string) 
+
+    }
+}
+"contract.ChainCore" *-- "kernel.kcontextImpl"
+"contract.StateSandbox" *-- "kernel.kcontextImpl"
+
+"contract.KContext" <|-- "kernel.kcontextImpl"
+"bridge.Instance" <|-- "kernel.kernInstance"
+"bridge.InstanceCreator" <|-- "kernel.kernvm"
+
+namespace manager {
+    class managerImpl << (S,Aquamarine) >> {
+        - core contract.ChainCore
+        - xbridge *bridge.XBridge
+        - kregistry registryImpl
+
+        - deployContract(ctx contract.KContext) (*contract.Response, error)
+        - upgradeContract(ctx contract.KContext) (*contract.Response, error)
+
+        + NewContext(cfg *contract.ContextConfig) (contract.Context, error)
+        + NewStateSandbox(cfg *contract.SandboxConfig) (contract.StateSandbox, error)
+        + GetKernRegistry() contract.KernRegistry
+
+    }
+    class registryImpl << (S,Aquamarine) >> {
+        - mutex sync.Mutex
+        - methods <font color=blue>map</font>[string]<font color=blue>map</font>[string]contract.KernMethod
+        - shortcuts <font color=blue>map</font>[string]shortcut
+
+        - getShortcut(method string) (shortcut, error)
+
+        + RegisterKernMethod(ctract string, method string, handler contract.KernMethod) 
+        + UnregisterKernMethod(ctract string, method string) 
+        + RegisterShortcut(oldmethod string, contract string, method string) 
+        + GetKernMethod(ctract string, method string) (contract.KernMethod, error)
+
+    }
+    class shortcut << (S,Aquamarine) >> {
+        + OldMethod string
+        + Contract string
+        + Method string
+
+    }
+}
+
+"contract.Manager" <|-- "manager.managerImpl"
+"contract.KernRegistry" <|-- "manager.registryImpl"
+
+namespace native {
+    class DockerProcess << (S,Aquamarine) >> {
+        - basedir string
+        - startcmd *exec.Cmd
+        - envs []string
+        - mounts []string
+        - ports []string
+        - cfg *contract.NativeDockerConfig
+        - id string
+
+        - resourceConfig() (int64, int64, error)
+        - start() error
+        - start() error
+
+        + Start() error
+        + Stop(timeout time.Duration) error
+
+    }
+    class HostProcess << (S,Aquamarine) >> {
+        - basedir string
+        - startcmd *exec.Cmd
+        - envs []string
+        - cmd *exec.Cmd
+
+        + Start() error
+        + Stop(timeout time.Duration) error
+
+    }
+    interface Process  {
+        + Start() error
+        + Stop(timeout time.Duration) error
+
+    }
+    class contractProcess << (S,Aquamarine) >> {
+        - cfg *contract.NativeConfig
+        - name string
+        - basedir string
+        - binpath string
+        - chainAddr string
+        - desc *protos.WasmCodeDesc
+        - process Process
+        - monitorStopch <font color=blue>chan</font> <font color=blue>struct</font>{}
+        - monitorWaiter sync.WaitGroup
+        - logger log15.Logger
+        - mutex sync.Mutex
+        - rpcPort int
+        - rpcConn *grpc.ClientConn
+        - rpcClient pbrpc.NativeCodeClient
+
+        - makeNativeProcess() (Process, error)
+        - waitReply() error
+        - heartBeat() error
+        - monitor() 
+        - resetRpcClient() error
+        - restartProcess() error
+        - start(startMonitor bool) error
+        - makeStartCommand() (*exec.Cmd, error)
+
+        + RpcClient() pbrpc.NativeCodeClient
+        + Start() error
+        + Stop() 
+        + GetDesc() *protos.WasmCodeDesc
+
+    }
+    class nativeCreator << (S,Aquamarine) >> {
+        - config *bridge.InstanceCreatorConfig
+        - listener net.Listener
+        - pm *processManager
+
+        - startRpcServer(service *bridge.SyscallService) (string, error)
+
+        + CreateInstance(ctx *bridge.Context, cp bridge.ContractCodeProvider) (bridge.Instance, error)
+        + RemoveCache(name string) 
+
+    }
+    class nativeVmInstance << (S,Aquamarine) >> {
+        - ctx *bridge.Context
+        - process *contractProcess
+
+        + Exec() error
+        + ResourceUsed() contract.Limits
+        + Release() 
+        + Abort(msg string) 
+
+    }
+    class processManager << (S,Aquamarine) >> {
+        - cfg *contract.NativeConfig
+        - basedir string
+        - chainAddr string
+        - mutex sync.Mutex
+        - contracts <font color=blue>map</font>[string]*contractProcess
+
+        - makeProcess(name string, desc *protos.WasmCodeDesc, code []byte) (*contractProcess, error)
+        - lookupProcess(name string, desc *protos.WasmCodeDesc) (*contractProcess, bool)
+
+        + GetProcess(name string, cp bridge.ContractCodeProvider) (*contractProcess, error)
+
+    }
+}
+"log15.Logger" *-- "native.DockerProcess"
+"log15.Logger" *-- "native.HostProcess"
+
+"native.Process" <|-- "native.DockerProcess"
+"native.Process" <|-- "native.HostProcess"
+"bridge.InstanceCreator" <|-- "native.nativeCreator"
+"bridge.Instance" <|-- "native.nativeVmInstance"
+
+"bridge.<font color=blue>func</font>(*InstanceCreatorConfig) (InstanceCreator, error)" #.. "bridge.NewInstanceCreatorFunc"
+"contract.<font color=blue>func</font>(*ManagerConfig) (Manager, error)" #.. "contract.NewManagerFunc"
+"contract.<font color=blue>func</font>(KContext) (*Response, error)" #.. "contract.KernMethod"
+@enduml

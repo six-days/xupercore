@@ -7,6 +7,10 @@ import (
 	docker "github.com/fsouza/go-dockerclient"
 )
 
+/**
+在linux环境下启动合约进程
+*/
+
 // Start implements process interface
 func (d *DockerProcess) start() error {
 	client, err := getDockerClient()

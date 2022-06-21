@@ -33,19 +33,19 @@ type NativeDockerConfig struct {
 	Memory    string
 }
 
+// WasmConfig wasm config
+type WasmConfig struct {
+	Enable bool
+	Driver string
+	XVM    XVMConfig
+}
+
 // XVMConfig contains the xvm configuration
 type XVMConfig struct {
 	// From 0 to 3
 	// The higher the number, the faster the program runs,
 	// but the compilation speed will be slower
 	OptLevel int `yaml:"optlevel"`
-}
-
-// WasmConfig wasm config
-type WasmConfig struct {
-	Enable bool
-	Driver string
-	XVM    XVMConfig
 }
 
 func (w *WasmConfig) DriverName() string {

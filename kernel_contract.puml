@@ -1,0 +1,1794 @@
+@startuml
+namespace bridge {
+    class Context << (S,Aquamarine) >> {
+        + ID int64
+        + Module string
+        + ContractName string
+        + ResourceLimits contract.Limits
+        + State contract.StateSandbox
+        + Args <font color=blue>map</font>[string][]byte
+        + Method string
+        + Initiator string
+        + Caller string
+        + AuthRequire []string
+        + CanInitialize bool
+        + Core contract.ChainCore
+        + TransferAmount string
+        + Instance Instance
+        + Logger logs.Logger
+        + SubResourceUsed contract.Limits
+        + ContractSet <font color=blue>map</font>[string]bool
+        + Events []*protos.ContractEvent
+        + Output *pb.Response
+        + ReadFromCache bool
+
+        + DiskUsed() int64
+        + ExceedDiskLimit() bool
+        + ResourceUsed() contract.Limits
+        + GetInitiator() string
+        + GetAuthRequire() []string
+
+    }
+    class ContextManager << (S,Aquamarine) >> {
+        - ctxlock sync.Mutex
+        - ctxid int64
+        - ctxs <font color=blue>map</font>[int64]*Context
+
+        + Context(id int64) (*Context, bool)
+        + MakeContext() *Context
+        + DestroyContext(ctx *Context) 
+
+    }
+    interface ContractCodeProvider  {
+        + GetContractCodeDesc(name string) (*protos.WasmCodeDesc, error)
+        + GetContractCode(name string) ([]byte, error)
+        + GetContractAbi(name string) ([]byte, error)
+        + GetContractCodeFromCache(name string) ([]byte, error)
+        + GetContractAbiFromCache(name string) ([]byte, error)
+
+    }
+    class ContractError << (S,Aquamarine) >> {
+        + Status int
+        + Message string
+
+        + Error() string
+
+    }
+    interface Instance  {
+        + Exec() error
+        + ResourceUsed() contract.Limits
+        + Release() 
+        + Abort(msg string) 
+
+    }
+    interface InstanceCreator  {
+        + CreateInstance(ctx *Context, cp ContractCodeProvider) (Instance, error)
+        + RemoveCache(name string) 
+
+    }
+    class InstanceCreatorConfig << (S,Aquamarine) >> {
+        + Basedir string
+        + SyscallService *SyscallService
+        + VMConfig VMConfig
+
+    }
+    class SyscallService << (S,Aquamarine) >> {
+        - ctxmgr *ContextManager
+        - bridge *XBridge
+        - core contract.ChainCore
+
+        + Ping(ctx context.Context, in *pb.PingRequest) (*pb.PingResponse, error)
+        + QueryBlock(ctx context.Context, in *pb.QueryBlockRequest) (*pb.QueryBlockResponse, error)
+        + QueryTx(ctx context.Context, in *pb.QueryTxRequest) (*pb.QueryTxResponse, error)
+        + Transfer(ctx context.Context, in *pb.TransferRequest) (*pb.TransferResponse, error)
+        + ContractCall(ctx context.Context, in *pb.ContractCallRequest) (*pb.ContractCallResponse, error)
+        + CrossContractQuery(ctx context.Context, in *pb.CrossContractQueryRequest) (*pb.CrossContractQueryResponse, error)
+        + PutObject(ctx context.Context, in *pb.PutRequest) (*pb.PutResponse, error)
+        + GetObject(ctx context.Context, in *pb.GetRequest) (*pb.GetResponse, error)
+        + DeleteObject(ctx context.Context, in *pb.DeleteRequest) (*pb.DeleteResponse, error)
+        + NewIterator(ctx context.Context, in *pb.IteratorRequest) (*pb.IteratorResponse, error)
+        + GetCallArgs(ctx context.Context, in *pb.GetCallArgsRequest) (*pb.CallArgs, error)
+        + SetOutput(ctx context.Context, in *pb.SetOutputRequest) (*pb.SetOutputResponse, error)
+        + GetAccountAddresses(ctx context.Context, in *pb.GetAccountAddressesRequest) (*pb.GetAccountAddressesResponse, error)
+        + PostLog(ctx context.Context, in *pb.PostLogRequest) (*pb.PostLogResponse, error)
+        + EmitEvent(ctx context.Context, in *pb.EmitEventRequest) (*pb.EmitEventResponse, error)
+
+    }
+    interface VMConfig  {
+        + DriverName() string
+        + IsEnable() bool
+
+    }
+    class XBridge << (S,Aquamarine) >> {
+        - ctxmgr *ContextManager
+        - syscallService *SyscallService
+        - basedir string
+        - vmconfigs <font color=blue>map</font>[ContractType]VMConfig
+        - creators <font color=blue>map</font>[ContractType]InstanceCreator
+        - xmodel ledger.XMReader
+        - config contract.ContractConfig
+        - core contract.ChainCore
+        - debugLogger logs.Logger
+
+        - initVM() error
+        - getCreator(tp ContractType) InstanceCreator
+
+        + NewContext(ctxCfg *contract.ContextConfig) (contract.Context, error)
+
+    }
+    class XBridgeConfig << (S,Aquamarine) >> {
+        + Basedir string
+        + VMConfigs <font color=blue>map</font>[ContractType]VMConfig
+        + XModel ledger.XMReader
+        + Config contract.ContractConfig
+        + LogDriver logs.Logger
+        + Core contract.ChainCore
+
+    }
+    class bridge.ContractType << (T, #FF7700) >>  {
+    }
+    class bridge.NewInstanceCreatorFunc << (T, #FF7700) >>  {
+    }
+    class codeProvider << (S,Aquamarine) >> {
+        - xstore stateReader
+
+        + GetContractCode(name string) ([]byte, error)
+        + GetContractAbi(name string) ([]byte, error)
+        + GetContractCodeDesc(name string) (*protos.WasmCodeDesc, error)
+        + GetContractCodeFromCache(name string) ([]byte, error)
+        + GetContractAbiFromCache(name string) ([]byte, error)
+
+    }
+    class contractManager << (S,Aquamarine) >> {
+        - xbridge *XBridge
+        - codeProvider ContractCodeProvider
+
+        - initContract(tp ContractType, contextConfig *contract.ContextConfig, args <font color=blue>map</font>[string][]byte) (*contract.Response, contract.Limits, error)
+
+        + DeployContract(kctx contract.KContext) (*contract.Response, contract.Limits, error)
+        + UpgradeContract(kctx contract.KContext) (*contract.Response, contract.Limits, error)
+
+    }
+    class descProvider << (S,Aquamarine) >> {
+        - desc *protos.WasmCodeDesc
+
+        + GetContractCodeDesc(name string) (*protos.WasmCodeDesc, error)
+
+    }
+    class registry << (S,Aquamarine) >> {
+        - mutex sync.Mutex
+        - drivers <font color=blue>map</font>[ContractType]<font color=blue>map</font>[string]NewInstanceCreatorFunc
+
+        + Register(tp ContractType, name string, driver NewInstanceCreatorFunc) 
+        + Open(tp ContractType, name string, config *InstanceCreatorConfig) (InstanceCreator, error)
+
+    }
+    interface stateGetReader  {
+        + Get(bucket string, key []byte) ([]byte, error)
+
+    }
+    interface stateReader  {
+        + Get(bucket string, key []byte) ([]byte, error)
+        + GetUncommited(bucket string, key []byte) (*ledger.VersionedData, error)
+
+    }
+    class stateReaderWrapper << (S,Aquamarine) >> {
+        + GetUncommited(bucket string, key []byte) (*ledger.VersionedData, error)
+
+    }
+    class vmContextImpl << (S,Aquamarine) >> {
+        - ctx *Context
+        - instance Instance
+        - release <font color=blue>func</font>() 
+
+        + Invoke(method string, args <font color=blue>map</font>[string][]byte) (*contract.Response, error)
+        + ResourceUsed() contract.Limits
+        + Release() error
+
+    }
+    class xmStateReader << (S,Aquamarine) >> {
+        - r ledger.XMReader
+
+        + Get(bucket string, key []byte) ([]byte, error)
+        + GetUncommited(bucket string, key []byte) (*ledger.VersionedData, error)
+
+    }
+}
+"bridge.contractManager" *-- "bridge.XBridge"
+"bridge.ContractCodeProvider" *-- "bridge.descProvider"
+"bridge.stateGetReader" *-- "bridge.stateReaderWrapper"
+
+"pbrpc.SyscallServer" <|-- "bridge.SyscallService"
+"bridge.ContractCodeProvider" <|-- "bridge.codeProvider"
+"contract.Context" <|-- "bridge.vmContextImpl"
+"bridge.stateGetReader" <|-- "bridge.xmStateReader"
+"bridge.stateReader" <|-- "bridge.xmStateReader"
+
+namespace contract {
+    interface ChainCore  {
+        + GetAccountAddresses(accountName string) ([]string, error)
+        + VerifyContractPermission(initiator string, authRequire []string, contractName string, methodName string) (bool, error)
+        + VerifyContractOwnerPermission(contractName string, authRequire []string) error
+        + QueryTransaction(txid []byte) (*pb.Transaction, error)
+        + QueryBlock(blockid []byte) (ledger.BlockHandle, error)
+
+    }
+    interface Context  {
+        + Invoke(method string, args <font color=blue>map</font>[string][]byte) (*Response, error)
+        + ResourceUsed() Limits
+        + Release() error
+
+    }
+    class ContextConfig << (S,Aquamarine) >> {
+        + State StateSandbox
+        + Initiator string
+        + AuthRequire []string
+        + Caller string
+        + Module string
+        + ContractName string
+        + ResourceLimits Limits
+        + CanInitialize bool
+        + TransferAmount string
+        + ContractSet <font color=blue>map</font>[string]bool
+        + ContractCodeFromCache bool
+        + TxInBlock bool
+
+    }
+    class ContractConfig << (S,Aquamarine) >> {
+        + EnableDebugLog bool
+        + EnableUpgrade bool
+        + LogDriver logs.Logger
+        + Native NativeConfig
+        + Wasm WasmConfig
+        + Xkernel XkernelConfig
+        + EVM EVMConfig
+
+    }
+    interface ContractEventState  {
+        + AddEvent(events ...*protos.ContractEvent) 
+
+    }
+    interface CrossQueryState  {
+    }
+    class EVMConfig << (S,Aquamarine) >> {
+        + Enable bool
+        + Driver string
+
+        + DriverName() string
+        + IsEnable() bool
+
+    }
+    interface Iterator  {
+        + Key() []byte
+        + Value() []byte
+        + Next() bool
+        + Error() error
+        + Close() 
+
+    }
+    interface KContext  {
+        + Args() <font color=blue>map</font>[string][]byte
+        + Initiator() string
+        + Caller() string
+        + AuthRequire() []string
+        + AddResourceUsed(delta Limits) 
+        + ResourceLimit() Limits
+        + Call(module string, contract string, method string, args <font color=blue>map</font>[string][]byte) (*Response, error)
+        + EmitAsyncTask(event string, args <font color=blue>interface</font>{}) error
+
+    }
+    interface KernRegistry  {
+        + RegisterKernMethod(contract string, method string, handler KernMethod) 
+        + UnregisterKernMethod(ctract string, method string) 
+        + RegisterShortcut(oldmethod string, contract string, method string) 
+        + GetKernMethod(contract string, method string) (KernMethod, error)
+
+    }
+    class Limits << (S,Aquamarine) >> {
+        + Cpu int64
+        + Memory int64
+        + Disk int64
+        + XFee int64
+
+        + TotalGas(gasPrice *protos.GasPrice) int64
+        + Add(l1 Limits) *Limits
+        + Sub(l1 Limits) *Limits
+        + Exceed(l1 Limits) bool
+
+    }
+    class LogConfig << (S,Aquamarine) >> {
+        + Module string
+        + Filepath string
+        + Filename string
+        + Fmt string
+        + Console bool
+        + Level string
+        + Async bool
+        + RotateInterval int
+        + RotateBackups int
+
+    }
+    interface Manager  {
+        + NewContext(cfg *ContextConfig) (Context, error)
+        + NewStateSandbox(cfg *SandboxConfig) (StateSandbox, error)
+        + GetKernRegistry() KernRegistry
+
+    }
+    class ManagerConfig << (S,Aquamarine) >> {
+        + Basedir string
+        + BCName string
+        + EnvConf *xconfig.EnvConf
+        + Core ChainCore
+        + XMReader ledger.XMReader
+        + Config *ContractConfig
+
+    }
+    class NativeConfig << (S,Aquamarine) >> {
+        + Driver string
+        + StopTimeout int
+        + Docker NativeDockerConfig
+        + Enable bool
+
+        + DriverName() string
+        + IsEnable() bool
+
+    }
+    class NativeDockerConfig << (S,Aquamarine) >> {
+        + Enable bool
+        + ImageName string
+        + Cpus float32
+        + Memory string
+
+    }
+    class RWSet << (S,Aquamarine) >> {
+        + RSet []*ledger.VersionedData
+        + WSet []*ledger.PureData
+
+    }
+    class Response << (S,Aquamarine) >> {
+        + Status int
+        + Message string
+        + Body []byte
+
+    }
+    class SandboxConfig << (S,Aquamarine) >> {
+        + XMReader ledger.XMReader
+        + UTXOReader UtxoReader
+
+    }
+    interface State  {
+    }
+    interface StateSandbox  {
+        + Flush() error
+        + RWSet() *RWSet
+        + UTXORWSet() *UTXORWSet
+
+    }
+    class UTXORWSet << (S,Aquamarine) >> {
+        + Rset []*protos.TxInput
+        + WSet []*protos.TxOutput
+
+    }
+    interface UTXOState  {
+        + Transfer(from string, to string, amount *big.Int) error
+
+    }
+    interface UtxoReader  {
+        + SelectUtxo( string,  *big.Int,  bool,  bool) ([]*protos.TxInput, [][]byte, *big.Int, error)
+
+    }
+    class WasmConfig << (S,Aquamarine) >> {
+        + Enable bool
+        + Driver string
+        + XVM XVMConfig
+
+        + DriverName() string
+        + IsEnable() bool
+
+    }
+    interface XMState  {
+        + Get(bucket string, key []byte) ([]byte, error)
+        + Select(bucket string, startKey []byte, endKey []byte) (Iterator, error)
+        + Put(bucket string, key []byte, value []byte) error
+        + Del(bucket string, key []byte) error
+
+    }
+    class XVMConfig << (S,Aquamarine) >> {
+        + OptLevel int
+
+    }
+    class XkernelConfig << (S,Aquamarine) >> {
+        + Enable bool
+        + Driver string
+        + Registry KernRegistry
+
+        + DriverName() string
+        + IsEnable() bool
+
+    }
+    class contract.KernMethod << (T, #FF7700) >>  {
+    }
+    class contract.NewManagerFunc << (T, #FF7700) >>  {
+    }
+}
+"contract.StateSandbox" *-- "contract.KContext"
+"contract.ContractEventState" *-- "contract.State"
+"contract.CrossQueryState" *-- "contract.State"
+"contract.UTXOState" *-- "contract.State"
+"contract.XMState" *-- "contract.State"
+"contract.State" *-- "contract.StateSandbox"
+
+"bridge.VMConfig" <|-- "contract.EVMConfig"
+"bridge.VMConfig" <|-- "contract.NativeConfig"
+"bridge.VMConfig" <|-- "contract.WasmConfig"
+"bridge.VMConfig" <|-- "contract.XkernelConfig"
+
+namespace govern_token {
+    class GovCtx << (S,Aquamarine) >> {
+        + BcName string
+        + Ledger LedgerRely
+        + Contract contract.Manager
+
+    }
+    interface GovManager  {
+        + GetGovTokenBalance(accountName string) (*protos.GovernTokenBalance, error)
+        + DetermineGovTokenIfInitialized() (bool, error)
+
+    }
+    class KernMethod << (S,Aquamarine) >> {
+        + BcName string
+        + NewGovResourceAmount int64
+        + Predistribution []ledger.Predistribution
+
+        - balanceOf(ctx contract.KContext, account string) (*utils.GovernTokenBalance, error)
+
+        + InitGovernTokens(ctx contract.KContext) (*contract.Response, error)
+        + TransferGovernTokens(ctx contract.KContext) (*contract.Response, error)
+        + LockGovernTokens(ctx contract.KContext) (*contract.Response, error)
+        + UnLockGovernTokens(ctx contract.KContext) (*contract.Response, error)
+        + QueryAccountGovernTokens(ctx contract.KContext) (*contract.Response, error)
+        + TotalSupply(ctx contract.KContext) (*contract.Response, error)
+
+    }
+    interface LedgerRely  {
+        + GetNewGovGas() (int64, error)
+        + GetGenesisPreDistribution() ([]ledger.Predistribution, error)
+        + GetTipXMSnapshotReader() (ledger.XMSnapshotReader, error)
+
+    }
+    class Manager << (S,Aquamarine) >> {
+        + Ctx *GovCtx
+
+        + GetGovTokenBalance(accountName string) (*protos.GovernTokenBalance, error)
+        + DetermineGovTokenIfInitialized() (bool, error)
+        + GetObjectBySnapshot(bucket string, object []byte) ([]byte, error)
+
+    }
+}
+"xcontext.BaseCtx" *-- "govern_token.GovCtx"
+
+"govern_token.GovManager" <|-- "govern_token.Manager"
+
+namespace kernel {
+    class kcontextImpl << (S,Aquamarine) >> {
+        - ctx *bridge.Context
+        - syscall *bridge.SyscallService
+        - used contract.Limits
+
+        + Args() <font color=blue>map</font>[string][]byte
+        + Initiator() string
+        + Caller() string
+        + AuthRequire() []string
+        + AddResourceUsed(delta contract.Limits) 
+        + ResourceLimit() contract.Limits
+        + Call(module string, contractName string, method string, args <font color=blue>map</font>[string][]byte) (*contract.Response, error)
+        + EmitAsyncTask(event string, args <font color=blue>interface</font>{}) error
+
+    }
+    class kernInstance << (S,Aquamarine) >> {
+        - ctx *bridge.Context
+        - kctx *kcontextImpl
+        - registry contract.KernRegistry
+
+        + Exec() error
+        + ResourceUsed() contract.Limits
+        + Release() 
+        + Abort(msg string) 
+
+    }
+    class kernvm << (S,Aquamarine) >> {
+        - registry contract.KernRegistry
+        - config *bridge.InstanceCreatorConfig
+
+        + CreateInstance(ctx *bridge.Context, cp bridge.ContractCodeProvider) (bridge.Instance, error)
+        + RemoveCache(name string) 
+
+    }
+}
+"contract.ChainCore" *-- "kernel.kcontextImpl"
+"contract.StateSandbox" *-- "kernel.kcontextImpl"
+
+"contract.KContext" <|-- "kernel.kcontextImpl"
+"bridge.Instance" <|-- "kernel.kernInstance"
+"bridge.InstanceCreator" <|-- "kernel.kernvm"
+
+namespace main {
+    class features << (S,Aquamarine) >> {
+        + Initialize(ctx code.Context) code.Response
+        + QueryBlock(ctx code.Context) code.Response
+        + QueryTx(ctx code.Context) code.Response
+        + Logging(ctx code.Context) code.Response
+        + Transfer(ctx code.Context) code.Response
+        + Invoke(ctx code.Context) code.Response
+        + Caller(ctx code.Context) code.Response
+
+    }
+}
+
+
+namespace manager {
+    class managerImpl << (S,Aquamarine) >> {
+        - core contract.ChainCore
+        - xbridge *bridge.XBridge
+        - kregistry registryImpl
+
+        - deployContract(ctx contract.KContext) (*contract.Response, error)
+        - upgradeContract(ctx contract.KContext) (*contract.Response, error)
+
+        + NewContext(cfg *contract.ContextConfig) (contract.Context, error)
+        + NewStateSandbox(cfg *contract.SandboxConfig) (contract.StateSandbox, error)
+        + GetKernRegistry() contract.KernRegistry
+
+    }
+    class registryImpl << (S,Aquamarine) >> {
+        - mutex sync.Mutex
+        - methods <font color=blue>map</font>[string]<font color=blue>map</font>[string]contract.KernMethod
+        - shortcuts <font color=blue>map</font>[string]shortcut
+
+        - getShortcut(method string) (shortcut, error)
+
+        + RegisterKernMethod(ctract string, method string, handler contract.KernMethod) 
+        + UnregisterKernMethod(ctract string, method string) 
+        + RegisterShortcut(oldmethod string, contract string, method string) 
+        + GetKernMethod(ctract string, method string) (contract.KernMethod, error)
+
+    }
+    class shortcut << (S,Aquamarine) >> {
+        + OldMethod string
+        + Contract string
+        + Method string
+
+    }
+}
+
+"contract.Manager" <|-- "manager.managerImpl"
+"contract.KernRegistry" <|-- "manager.registryImpl"
+
+namespace memrpc {
+    class Server << (S,Aquamarine) >> {
+        - methods <font color=blue>map</font>[string]*reflect.Method
+        - vsyscall reflect.Value
+
+        + CallMethod(ctx context.Context, ctxid int64, method string, requestBuf []byte) ([]byte, error)
+
+    }
+    interface syscallHeaderGetter  {
+        + GetHeader() *pb.SyscallHeader
+
+    }
+}
+
+
+namespace mock {
+    class MockLogger << (S,Aquamarine) >> {
+        + GetLogId() string
+        + SetCommField(key string, value <font color=blue>interface</font>{}) 
+        + SetInfoField(key string, value <font color=blue>interface</font>{}) 
+
+    }
+    class TestHelper << (S,Aquamarine) >> {
+        - basedir string
+        - utxo *contract.UTXORWSet
+        - utxoReader sandbox.UtxoReader
+        - state *sandbox.MemXModel
+        - manager contract.Manager
+
+        - initAccount() 
+
+        + Manager() contract.Manager
+        + Basedir() string
+        + State() *sandbox.MemXModel
+        + UTXOState() *contract.UTXORWSet
+        + Deploy(module string, lang string, contractName string, bin []byte, args <font color=blue>map</font>[string][]byte) (*contract.Response, error)
+        + Upgrade(contractName string, bin []byte) error
+        + Invoke(module string, contractName string, method string, args <font color=blue>map</font>[string][]byte) (*contract.Response, error)
+        + Commit(state contract.StateSandbox) 
+        + Close() 
+
+    }
+    class fakeChainCore << (S,Aquamarine) >> {
+        + GetAccountAddresses(accountName string) ([]string, error)
+        + VerifyContractPermission(initiator string, authRequire []string, contractName string, methodName string) (bool, error)
+        + VerifyContractOwnerPermission(contractName string, authRequire []string) error
+        + QueryBlock(blockid []byte) (ledger.BlockHandle, error)
+        + QueryTransaction(txid []byte) (*pb.Transaction, error)
+
+    }
+}
+"log15.Logger" *-- "mock.MockLogger"
+
+"contract.ChainCore" <|-- "mock.fakeChainCore"
+
+namespace pb {
+    class ArgPair << (S,Aquamarine) >> {
+        + Key string
+        + Value []byte
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetKey() string
+        + GetValue() []byte
+
+    }
+    class Block << (S,Aquamarine) >> {
+        + Blockid string
+        + PreHash string
+        + Proposer []byte
+        + Sign string
+        + Pubkey []byte
+        + Height int64
+        + Timestamp int64
+        + Txids []string
+        + TxCount int32
+        + InTrunk bool
+        + NextHash string
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetBlockid() string
+        + GetPreHash() string
+        + GetProposer() []byte
+        + GetSign() string
+        + GetPubkey() []byte
+        + GetHeight() int64
+        + GetTimestamp() int64
+        + GetTxids() []string
+        + GetTxCount() int32
+        + GetInTrunk() bool
+        + GetNextHash() string
+
+    }
+    class CallArgs << (S,Aquamarine) >> {
+        + Method string
+        + Args []*ArgPair
+        + Initiator string
+        + AuthRequire []string
+        + TransferAmount string
+        + Caller string
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetMethod() string
+        + GetArgs() []*ArgPair
+        + GetInitiator() string
+        + GetAuthRequire() []string
+        + GetTransferAmount() string
+        + GetCaller() string
+
+    }
+    class ContractCallRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Module string
+        + Contract string
+        + Method string
+        + Args []*ArgPair
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetModule() string
+        + GetContract() string
+        + GetMethod() string
+        + GetArgs() []*ArgPair
+
+    }
+    class ContractCallResponse << (S,Aquamarine) >> {
+        + Response *Response
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetResponse() *Response
+
+    }
+    class CrossContractQueryRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Uri string
+        + Args []*ArgPair
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetUri() string
+        + GetArgs() []*ArgPair
+
+    }
+    class CrossContractQueryResponse << (S,Aquamarine) >> {
+        + Response *Response
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetResponse() *Response
+
+    }
+    class DeleteRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Key []byte
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetKey() []byte
+
+    }
+    class DeleteResponse << (S,Aquamarine) >> {
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+
+    }
+    class EmitEventRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Name string
+        + Body []byte
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetName() string
+        + GetBody() []byte
+
+    }
+    class EmitEventResponse << (S,Aquamarine) >> {
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+
+    }
+    class GetAccountAddressesRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Account string
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetAccount() string
+
+    }
+    class GetAccountAddressesResponse << (S,Aquamarine) >> {
+        + Addresses []string
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetAddresses() []string
+
+    }
+    class GetCallArgsRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+
+    }
+    class GetRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Key []byte
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetKey() []byte
+
+    }
+    class GetResponse << (S,Aquamarine) >> {
+        + Value []byte
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetValue() []byte
+
+    }
+    class IteratorItem << (S,Aquamarine) >> {
+        + Key []byte
+        + Value []byte
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetKey() []byte
+        + GetValue() []byte
+
+    }
+    class IteratorRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Start []byte
+        + Limit []byte
+        + Cap int32
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetStart() []byte
+        + GetLimit() []byte
+        + GetCap() int32
+
+    }
+    class IteratorResponse << (S,Aquamarine) >> {
+        + Items []*IteratorItem
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetItems() []*IteratorItem
+
+    }
+    class NativeCallRequest << (S,Aquamarine) >> {
+        + Ctxid int64
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetCtxid() int64
+
+    }
+    class NativeCallResponse << (S,Aquamarine) >> {
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+
+    }
+    class PingRequest << (S,Aquamarine) >> {
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+
+    }
+    class PingResponse << (S,Aquamarine) >> {
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+
+    }
+    class PostLogRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Entry string
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetEntry() string
+
+    }
+    class PostLogResponse << (S,Aquamarine) >> {
+        + Entry string
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetEntry() string
+
+    }
+    class PutRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Key []byte
+        + Value []byte
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetKey() []byte
+        + GetValue() []byte
+
+    }
+    class PutResponse << (S,Aquamarine) >> {
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+
+    }
+    class QueryBlockRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Blockid string
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetBlockid() string
+
+    }
+    class QueryBlockResponse << (S,Aquamarine) >> {
+        + Block *Block
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetBlock() *Block
+
+    }
+    class QueryTxRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Txid string
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetTxid() string
+
+    }
+    class QueryTxResponse << (S,Aquamarine) >> {
+        + Tx *Transaction
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetTx() *Transaction
+
+    }
+    class Response << (S,Aquamarine) >> {
+        + Status int32
+        + Message string
+        + Body []byte
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetStatus() int32
+        + GetMessage() string
+        + GetBody() []byte
+
+    }
+    class SetOutputRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + Response *Response
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetResponse() *Response
+
+    }
+    class SetOutputResponse << (S,Aquamarine) >> {
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+
+    }
+    class SyscallHeader << (S,Aquamarine) >> {
+        + Ctxid int64
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetCtxid() int64
+
+    }
+    class Transaction << (S,Aquamarine) >> {
+        + Txid string
+        + Blockid string
+        + TxInputs []*TxInput
+        + TxOutputs []*TxOutput
+        + Desc []byte
+        + Initiator string
+        + AuthRequire []string
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetTxid() string
+        + GetBlockid() string
+        + GetTxInputs() []*TxInput
+        + GetTxOutputs() []*TxOutput
+        + GetDesc() []byte
+        + GetInitiator() string
+        + GetAuthRequire() []string
+
+    }
+    class TransferRequest << (S,Aquamarine) >> {
+        + Header *SyscallHeader
+        + From string
+        + To string
+        + Amount string
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetHeader() *SyscallHeader
+        + GetFrom() string
+        + GetTo() string
+        + GetAmount() string
+
+    }
+    class TransferResponse << (S,Aquamarine) >> {
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+
+    }
+    class TxInput << (S,Aquamarine) >> {
+        + RefTxid string
+        + RefOffset int32
+        + FromAddr []byte
+        + Amount string
+        + FrozenHeight int64
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetRefTxid() string
+        + GetRefOffset() int32
+        + GetFromAddr() []byte
+        + GetAmount() string
+        + GetFrozenHeight() int64
+
+    }
+    class TxOutput << (S,Aquamarine) >> {
+        + Amount string
+        + ToAddr []byte
+        + FrozenHeight int64
+        + XXX_NoUnkeyedLiteral <font color=blue>struct</font>{}
+        + XXX_unrecognized []byte
+        + XXX_sizecache int32
+
+        + Reset() 
+        + String() string
+        + ProtoMessage() 
+        + Descriptor() ([]byte, []int)
+        + XXX_Unmarshal(b []byte) error
+        + XXX_Marshal(b []byte, deterministic bool) ([]byte, error)
+        + XXX_Merge(src proto.Message) 
+        + XXX_Size() int
+        + XXX_DiscardUnknown() 
+        + GetAmount() string
+        + GetToAddr() []byte
+        + GetFrozenHeight() int64
+
+    }
+}
+
+"memrpc.syscallHeaderGetter" <|-- "pb.ContractCallRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.CrossContractQueryRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.DeleteRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.EmitEventRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.GetAccountAddressesRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.GetCallArgsRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.GetRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.IteratorRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.PostLogRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.PutRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.QueryBlockRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.QueryTxRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.SetOutputRequest"
+"memrpc.syscallHeaderGetter" <|-- "pb.TransferRequest"
+
+namespace pbrpc {
+    interface NativeCodeClient  {
+        + Call(ctx context.Context, in *pb.NativeCallRequest, opts ...grpc.CallOption) (*pb.NativeCallResponse, error)
+        + Ping(ctx context.Context, in *pb.PingRequest, opts ...grpc.CallOption) (*pb.PingResponse, error)
+
+    }
+    interface NativeCodeServer  {
+        + Call( context.Context,  *pb.NativeCallRequest) (*pb.NativeCallResponse, error)
+        + Ping( context.Context,  *pb.PingRequest) (*pb.PingResponse, error)
+
+    }
+    interface SyscallClient  {
+        + PutObject(ctx context.Context, in *pb.PutRequest, opts ...grpc.CallOption) (*pb.PutResponse, error)
+        + GetObject(ctx context.Context, in *pb.GetRequest, opts ...grpc.CallOption) (*pb.GetResponse, error)
+        + DeleteObject(ctx context.Context, in *pb.DeleteRequest, opts ...grpc.CallOption) (*pb.DeleteResponse, error)
+        + NewIterator(ctx context.Context, in *pb.IteratorRequest, opts ...grpc.CallOption) (*pb.IteratorResponse, error)
+        + QueryTx(ctx context.Context, in *pb.QueryTxRequest, opts ...grpc.CallOption) (*pb.QueryTxResponse, error)
+        + QueryBlock(ctx context.Context, in *pb.QueryBlockRequest, opts ...grpc.CallOption) (*pb.QueryBlockResponse, error)
+        + Transfer(ctx context.Context, in *pb.TransferRequest, opts ...grpc.CallOption) (*pb.TransferResponse, error)
+        + ContractCall(ctx context.Context, in *pb.ContractCallRequest, opts ...grpc.CallOption) (*pb.ContractCallResponse, error)
+        + CrossContractQuery(ctx context.Context, in *pb.CrossContractQueryRequest, opts ...grpc.CallOption) (*pb.CrossContractQueryResponse, error)
+        + GetAccountAddresses(ctx context.Context, in *pb.GetAccountAddressesRequest, opts ...grpc.CallOption) (*pb.GetAccountAddressesResponse, error)
+        + Ping(ctx context.Context, in *pb.PingRequest, opts ...grpc.CallOption) (*pb.PingResponse, error)
+        + PostLog(ctx context.Context, in *pb.PostLogRequest, opts ...grpc.CallOption) (*pb.PostLogResponse, error)
+        + GetCallArgs(ctx context.Context, in *pb.GetCallArgsRequest, opts ...grpc.CallOption) (*pb.CallArgs, error)
+        + SetOutput(ctx context.Context, in *pb.SetOutputRequest, opts ...grpc.CallOption) (*pb.SetOutputResponse, error)
+        + EmitEvent(ctx context.Context, in *pb.EmitEventRequest, opts ...grpc.CallOption) (*pb.EmitEventResponse, error)
+
+    }
+    interface SyscallServer  {
+        + PutObject( context.Context,  *pb.PutRequest) (*pb.PutResponse, error)
+        + GetObject( context.Context,  *pb.GetRequest) (*pb.GetResponse, error)
+        + DeleteObject( context.Context,  *pb.DeleteRequest) (*pb.DeleteResponse, error)
+        + NewIterator( context.Context,  *pb.IteratorRequest) (*pb.IteratorResponse, error)
+        + QueryTx( context.Context,  *pb.QueryTxRequest) (*pb.QueryTxResponse, error)
+        + QueryBlock( context.Context,  *pb.QueryBlockRequest) (*pb.QueryBlockResponse, error)
+        + Transfer( context.Context,  *pb.TransferRequest) (*pb.TransferResponse, error)
+        + ContractCall( context.Context,  *pb.ContractCallRequest) (*pb.ContractCallResponse, error)
+        + CrossContractQuery( context.Context,  *pb.CrossContractQueryRequest) (*pb.CrossContractQueryResponse, error)
+        + GetAccountAddresses( context.Context,  *pb.GetAccountAddressesRequest) (*pb.GetAccountAddressesResponse, error)
+        + Ping( context.Context,  *pb.PingRequest) (*pb.PingResponse, error)
+        + PostLog( context.Context,  *pb.PostLogRequest) (*pb.PostLogResponse, error)
+        + GetCallArgs( context.Context,  *pb.GetCallArgsRequest) (*pb.CallArgs, error)
+        + SetOutput( context.Context,  *pb.SetOutputRequest) (*pb.SetOutputResponse, error)
+        + EmitEvent( context.Context,  *pb.EmitEventRequest) (*pb.EmitEventResponse, error)
+
+    }
+    class UnimplementedNativeCodeServer << (S,Aquamarine) >> {
+        + Call(ctx context.Context, req *pb.NativeCallRequest) (*pb.NativeCallResponse, error)
+        + Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingResponse, error)
+
+    }
+    class UnimplementedSyscallServer << (S,Aquamarine) >> {
+        + PutObject(ctx context.Context, req *pb.PutRequest) (*pb.PutResponse, error)
+        + GetObject(ctx context.Context, req *pb.GetRequest) (*pb.GetResponse, error)
+        + DeleteObject(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteResponse, error)
+        + NewIterator(ctx context.Context, req *pb.IteratorRequest) (*pb.IteratorResponse, error)
+        + QueryTx(ctx context.Context, req *pb.QueryTxRequest) (*pb.QueryTxResponse, error)
+        + QueryBlock(ctx context.Context, req *pb.QueryBlockRequest) (*pb.QueryBlockResponse, error)
+        + Transfer(ctx context.Context, req *pb.TransferRequest) (*pb.TransferResponse, error)
+        + ContractCall(ctx context.Context, req *pb.ContractCallRequest) (*pb.ContractCallResponse, error)
+        + CrossContractQuery(ctx context.Context, req *pb.CrossContractQueryRequest) (*pb.CrossContractQueryResponse, error)
+        + GetAccountAddresses(ctx context.Context, req *pb.GetAccountAddressesRequest) (*pb.GetAccountAddressesResponse, error)
+        + Ping(ctx context.Context, req *pb.PingRequest) (*pb.PingResponse, error)
+        + PostLog(ctx context.Context, req *pb.PostLogRequest) (*pb.PostLogResponse, error)
+        + GetCallArgs(ctx context.Context, req *pb.GetCallArgsRequest) (*pb.CallArgs, error)
+        + SetOutput(ctx context.Context, req *pb.SetOutputRequest) (*pb.SetOutputResponse, error)
+        + EmitEvent(ctx context.Context, req *pb.EmitEventRequest) (*pb.EmitEventResponse, error)
+
+    }
+    class nativeCodeClient << (S,Aquamarine) >> {
+        - cc grpc.ClientConnInterface
+
+        + Call(ctx context.Context, in *pb.NativeCallRequest, opts ...grpc.CallOption) (*pb.NativeCallResponse, error)
+        + Ping(ctx context.Context, in *pb.PingRequest, opts ...grpc.CallOption) (*pb.PingResponse, error)
+
+    }
+    class syscallClient << (S,Aquamarine) >> {
+        - cc grpc.ClientConnInterface
+
+        + PutObject(ctx context.Context, in *pb.PutRequest, opts ...grpc.CallOption) (*pb.PutResponse, error)
+        + GetObject(ctx context.Context, in *pb.GetRequest, opts ...grpc.CallOption) (*pb.GetResponse, error)
+        + DeleteObject(ctx context.Context, in *pb.DeleteRequest, opts ...grpc.CallOption) (*pb.DeleteResponse, error)
+        + NewIterator(ctx context.Context, in *pb.IteratorRequest, opts ...grpc.CallOption) (*pb.IteratorResponse, error)
+        + QueryTx(ctx context.Context, in *pb.QueryTxRequest, opts ...grpc.CallOption) (*pb.QueryTxResponse, error)
+        + QueryBlock(ctx context.Context, in *pb.QueryBlockRequest, opts ...grpc.CallOption) (*pb.QueryBlockResponse, error)
+        + Transfer(ctx context.Context, in *pb.TransferRequest, opts ...grpc.CallOption) (*pb.TransferResponse, error)
+        + ContractCall(ctx context.Context, in *pb.ContractCallRequest, opts ...grpc.CallOption) (*pb.ContractCallResponse, error)
+        + CrossContractQuery(ctx context.Context, in *pb.CrossContractQueryRequest, opts ...grpc.CallOption) (*pb.CrossContractQueryResponse, error)
+        + GetAccountAddresses(ctx context.Context, in *pb.GetAccountAddressesRequest, opts ...grpc.CallOption) (*pb.GetAccountAddressesResponse, error)
+        + Ping(ctx context.Context, in *pb.PingRequest, opts ...grpc.CallOption) (*pb.PingResponse, error)
+        + PostLog(ctx context.Context, in *pb.PostLogRequest, opts ...grpc.CallOption) (*pb.PostLogResponse, error)
+        + GetCallArgs(ctx context.Context, in *pb.GetCallArgsRequest, opts ...grpc.CallOption) (*pb.CallArgs, error)
+        + SetOutput(ctx context.Context, in *pb.SetOutputRequest, opts ...grpc.CallOption) (*pb.SetOutputResponse, error)
+        + EmitEvent(ctx context.Context, in *pb.EmitEventRequest, opts ...grpc.CallOption) (*pb.EmitEventResponse, error)
+
+    }
+}
+
+"pbrpc.NativeCodeServer" <|-- "pbrpc.UnimplementedNativeCodeServer"
+"pbrpc.SyscallServer" <|-- "pbrpc.UnimplementedSyscallServer"
+"pbrpc.NativeCodeClient" <|-- "pbrpc.nativeCodeClient"
+"pbrpc.SyscallClient" <|-- "pbrpc.syscallClient"
+
+namespace propose {
+    class KernMethod << (S,Aquamarine) >> {
+        + BcName string
+
+        - getNextProposalID(ctx contract.KContext) (string, error)
+        - unlockGovernTokensForProposal(ctx contract.KContext, proposalID string) error
+        - getProposal(ctx contract.KContext, proposalID string) (*utils.Proposal, error)
+        - updateProposal(ctx contract.KContext, proposalID string, proposal *utils.Proposal) error
+        - makeTimerArgs(proposalID string, triggerHeight []byte, method string) (<font color=blue>map</font>[string][]byte, error)
+        - parse(proposalStr string) (*utils.Proposal, error)
+        - unParse(proposal *utils.Proposal) ([]byte, error)
+
+        + Propose(ctx contract.KContext) (*contract.Response, error)
+        + Vote(ctx contract.KContext) (*contract.Response, error)
+        + Thaw(ctx contract.KContext) (*contract.Response, error)
+        + Query(ctx contract.KContext) (*contract.Response, error)
+        + CheckVoteResult(ctx contract.KContext) (*contract.Response, error)
+        + Trigger(ctx contract.KContext) (*contract.Response, error)
+
+    }
+    interface LedgerRely  {
+        + GetTipXMSnapshotReader() (ledger.XMSnapshotReader, error)
+
+    }
+    class Manager << (S,Aquamarine) >> {
+        + Ctx *ProposeCtx
+
+        + GetProposalByID(proposalID string) (*protos.Proposal, error)
+        + GetObjectBySnapshot(bucket string, object []byte) ([]byte, error)
+
+    }
+    class ProposalID << (S,Aquamarine) >> {
+        + ProposalID string
+
+    }
+    class ProposeCtx << (S,Aquamarine) >> {
+        + BcName string
+        + Ledger LedgerRely
+        + Contract contract.Manager
+
+    }
+    interface ProposeManager  {
+        + GetProposalByID(proposalID string) (*protos.Proposal, error)
+
+    }
+}
+"xcontext.BaseCtx" *-- "propose.ProposeCtx"
+
+"propose.ProposeManager" <|-- "propose.Manager"
+
+namespace sandbox {
+    class ContractIterator << (S,Aquamarine) >> {
+        + Value() []byte
+
+    }
+    class MemXModel << (S,Aquamarine) >> {
+        - tree *redblacktree.Tree
+
+        + Get(bucket string, key []byte) (*ledger.VersionedData, error)
+        + Put(bucket string, key []byte, value *ledger.VersionedData) error
+        + GetUncommited(bucket string, key []byte) (*ledger.VersionedData, error)
+        + Select(bucket string, startKey []byte, endKey []byte) (ledger.XMIterator, error)
+        + NewIterator() ledger.XMIterator
+
+    }
+    class UTXOReader << (S,Aquamarine) >> {
+        - inputCache []*protos.TxInput
+        - inputIdx int
+
+        + SelectUtxo(from string, amount *big.Int, lock bool, excludeUnconfirmed bool) ([]*protos.TxInput, [][]byte, *big.Int, error)
+
+    }
+    interface UtxoReader  {
+        + SelectUtxo( string,  *big.Int,  bool,  bool) ([]*protos.TxInput, [][]byte, *big.Int, error)
+
+    }
+    class XMCache << (S,Aquamarine) >> {
+        - inputsCache *MemXModel
+        - outputsCache *MemXModel
+        - model ledger.XMReader
+        - utxoSandbox *utxo.UTXOSandbox
+        - events []*protos.ContractEvent
+
+        - getFromOuputsCache(bucket string, key []byte) (*ledger.VersionedData, error)
+        - getAndSetFromInputsCache(bucket string, key []byte) (*ledger.VersionedData, error)
+        - newXModelCacheIterator(bucket string, startKey []byte, endKey []byte) (contract.Iterator, error)
+        - getReadSets() []*ledger.VersionedData
+        - getWriteSets() []*ledger.PureData
+        - flushUTXORWSet() error
+        - writeEventRWSet() error
+
+        + Get(bucket string, key []byte) ([]byte, error)
+        + GetUncommited(bucket string, key []byte) (*ledger.VersionedData, error)
+        + Put(bucket string, key []byte, value []byte) error
+        + Del(bucket string, key []byte) error
+        + Select(bucket string, startKey []byte, endKey []byte) (contract.Iterator, error)
+        + RWSet() *contract.RWSet
+        + Transfer(from string, to string, amount *big.Int) error
+        + UTXORWSet() *contract.UTXORWSet
+        + AddEvent(events ...*protos.ContractEvent) 
+        + Flush() error
+
+    }
+    class multiIterator << (S,Aquamarine) >> {
+        - front *peekIterator
+        - back *peekIterator
+        - key []byte
+        - value *ledger.VersionedData
+
+        + Key() []byte
+        + Value() *ledger.VersionedData
+        + Next() bool
+        + Error() error
+        + Close() 
+
+    }
+    class peekIterator << (S,Aquamarine) >> {
+        - next bool
+        - key []byte
+        - value *ledger.VersionedData
+        - iter ledger.XMIterator
+
+        - fill() 
+
+        + HasNext() bool
+        + Next() ([]byte, *ledger.VersionedData)
+        + Peek() ([]byte, *ledger.VersionedData)
+        + Error() error
+        + Close() 
+
+    }
+    class rsetIterator << (S,Aquamarine) >> {
+        - bucket string
+        - mc *XMCache
+        - err error
+
+        + Next() bool
+        + Error() error
+
+    }
+    class stripDelIterator << (S,Aquamarine) >> {
+        + Next() bool
+
+    }
+    class treeIterator << (S,Aquamarine) >> {
+        - cmp utils.Comparator
+        - iter *redblacktree.Iterator
+        - end []byte
+        - err error
+        - iterDone bool
+
+        + Next() bool
+        + Key() []byte
+        + Value() *ledger.VersionedData
+        + Error() error
+        + Close() 
+
+    }
+}
+"ledger.XMIterator" *-- "sandbox.ContractIterator"
+"ledger.XMIterator" *-- "sandbox.rsetIterator"
+"ledger.XMIterator" *-- "sandbox.stripDelIterator"
+
+"contract.UtxoReader" <|-- "sandbox.UTXOReader"
+"sandbox.UtxoReader" <|-- "sandbox.UTXOReader"
+"bridge.stateGetReader" <|-- "sandbox.XMCache"
+"bridge.stateReader" <|-- "sandbox.XMCache"
+"contract.ContractEventState" <|-- "sandbox.XMCache"
+"contract.StateSandbox" <|-- "sandbox.XMCache"
+"contract.UTXOState" <|-- "sandbox.XMCache"
+"contract.XMState" <|-- "sandbox.XMCache"
+
+namespace timer {
+    class KernMethod << (S,Aquamarine) >> {
+        + BcName string
+
+        - getNextTaskID(ctx contract.KContext) (string, error)
+
+        + Add(ctx contract.KContext) (*contract.Response, error)
+        + Do(ctx contract.KContext) (*contract.Response, error)
+        + Trigger(ctx contract.KContext, triggerBuf []byte) 
+
+    }
+    interface LedgerRely  {
+        + GetTipXMSnapshotReader() (ledger.XMSnapshotReader, error)
+
+    }
+    class Manager << (S,Aquamarine) >> {
+        + Ctx *TimerCtx
+
+        + GetTimerTasks(blockHeight int64) (uint64, error)
+        + GetObjectBySnapshot(bucket string, object []byte) ([]byte, error)
+
+    }
+    class TimerCtx << (S,Aquamarine) >> {
+        + BcName string
+        + Ledger LedgerRely
+        + Contract contract.Manager
+
+    }
+    interface TimerManager  {
+        + GetTimerTasks(blockHeight int64) (uint64, error)
+
+    }
+}
+"xcontext.BaseCtx" *-- "timer.TimerCtx"
+
+"timer.TimerManager" <|-- "timer.Manager"
+
+namespace utils {
+    class GovernTokenBalance << (S,Aquamarine) >> {
+        + TotalBalance *big.Int
+        + LockedBalance <font color=blue>map</font>[string]*big.Int
+
+    }
+    class Proposal << (S,Aquamarine) >> {
+        + Args <font color=blue>map</font>[string]<font color=blue>interface</font>{}
+        + Trigger *TriggerDesc
+        + VoteAmount *big.Int
+        + Status string
+        + Proposer string
+
+    }
+    class TriggerDesc << (S,Aquamarine) >> {
+        + Height int64
+        + Module string
+        + Contract string
+        + Method string
+        + Args <font color=blue>map</font>[string]<font color=blue>interface</font>{}
+
+    }
+}
+
+
+"__builtin__.string" #.. "bridge.ContractType"
+"bridge.<font color=blue>func</font>(*InstanceCreatorConfig) (InstanceCreator, error)" #.. "bridge.NewInstanceCreatorFunc"
+"contract.<font color=blue>func</font>(*ManagerConfig) (Manager, error)" #.. "contract.NewManagerFunc"
+"contract.<font color=blue>func</font>(KContext) (*Response, error)" #.. "contract.KernMethod"
+@enduml

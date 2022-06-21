@@ -12,6 +12,10 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
+/**
+合约的部署和升级实现
+*/
+
 type contractManager struct {
 	xbridge      *XBridge
 	codeProvider ContractCodeProvider
